@@ -148,6 +148,14 @@ is sent in `json` mode on purpose: with these models a prompt (participant
 names, meeting context or the previous chunk) makes them invent dialogue on
 silent chunks.
 
+In `json` mode a configured prompt (including the `WHISPER_PROMPT` with the
+participant names set by the scenario wrappers) is ignored, and the log says so
+once at startup. When no `language` is configured, the transcript language is
+the majority of the `languages[0].code` values (ISO 639-1, e.g. `pt`) that
+`gpt-transcribe` returns per chunk. A `response_format` other than
+`verbose_json` or `json` (case-insensitive) logs a warning and falls back to
+`verbose_json`.
+
 On FreeSWITCH recordings (one mixed track) keep the default `verbose_json`.
 
 ### API key resolution

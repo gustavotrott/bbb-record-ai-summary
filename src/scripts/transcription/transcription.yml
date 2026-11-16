@@ -88,7 +88,11 @@ openai:
   #         chunk's own offsets from events.xml. Recommended for LiveKit
   #         recordings (one track per microphone, already cut into short
   #         talking cues): gpt-transcribe stays silent on open microphones
-  #         where whisper-1 tends to invent text. No prompt is sent in this mode.
+  #         where whisper-1 tends to invent text. No prompt is sent in this
+  #         mode (a configured prompt is ignored and logged once). Without
+  #         `language`, the language is the majority of the ones the API
+  #         detects per chunk.
+  # Any other value logs a warning and falls back to verbose_json.
   # response_format: verbose_json
 
   # Model used with response_format: verbose_json.

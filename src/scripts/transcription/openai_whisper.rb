@@ -92,6 +92,7 @@ WHISPER_LANG_TO_ISO = {
 def whisper_language_to_iso(name)
   return nil if name.nil?
   key = name.to_s.strip.downcase
+  key = key[0, 2] if key.match?(/\A[a-z]{2}[-_]/)   # region code: "pt-br" -> "pt"
   return key if key.length == 2   # already an ISO code
   WHISPER_LANG_TO_ISO[key]
 end
@@ -121,6 +122,15 @@ def info(msg)
     $stdout.puts "[INFO ] #{msg}"
   else
     $stderr.puts "INFO : #{msg}"
+  end
+end
+
+def log_warn(msg)
+  if $logger
+    $logger.warn(msg)
+    $stdout.puts "[WARN ] #{msg}"
+  else
+    $stderr.puts "WARN : #{msg}"
   end
 end
 
@@ -210,8 +220,11 @@ def call_openai(wav_path, api_key, language, http, chunk_offset_ms: 0,
                  [{ 'offsets' => { 'from' => chunk_offset_ms, 'to' => chunk_offset_ms + chunk_duration_ms.to_i },
                     'text' => text }]
                end
+    # gpt-transcribe returns the detected languages as ISO 639-1 codes
+    # ("languages": [{"code": "pt"}]); the array is empty when the text is empty.
+    # It feeds the same majority vote as verbose_json, used when no language is set.
     return { segments: segments, raw_count: segments.size, sum_logprob: 0.0, sum_no_speech_prob: 0.0,
-             api_error: false, detected_language: language }
+             api_error: false, detected_language: data.dig('languages', 0, 'code') }
   end
 
   raw_segs    = data['segments'] || []
@@ -349,9 +362,13 @@ known_speaker_names = if known_speaker_names_raw.empty?
                         known_speaker_names_raw.split(',').map(&:strip).reject(&:empty?).then { |a| a.empty? ? nil : a }
                       end
 
-response_format = ENV['OPENAI_RESPONSE_FORMAT'].to_s.strip
-response_format = openai_cfg['response_format'].to_s.strip if response_format.empty?
-response_format = 'verbose_json' unless response_format == 'json'
+response_format = ENV['OPENAI_RESPONSE_FORMAT'].to_s.strip.downcase
+response_format = openai_cfg['response_format'].to_s.strip.downcase if response_format.empty?
+response_format = 'verbose_json' if response_format.empty?
+unless %w[verbose_json json].include?(response_format)
+  log_warn "Unknown response_format '#{response_format}' (expected verbose_json or json) — using verbose_json"
+  response_format = 'verbose_json'
+end
 
 model = ENV['OPENAI_MODEL'].to_s.strip
 if response_format == 'json'
@@ -362,6 +379,14 @@ else
   model = DEFAULT_MODEL if model.empty?
 end
 info "Model: #{model} (response_format: #{response_format})"
+
+# json mode never sends a prompt. The scenario wrappers (openai_whisper_main.rb,
+# _precise, ...) set WHISPER_PROMPT from the participant names, so say once why
+# it has no effect, and keep it out of the metadata.
+if response_format == 'json' && prompt
+  info "response_format=json: prompt ignored (#{prompt.length} chars)"
+  prompt = nil
+end
 
 # known_speaker_names only works with diarizing models; drop it otherwise so we
 # never send a parameter the model does not support.
